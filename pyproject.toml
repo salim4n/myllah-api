@@ -8,6 +8,7 @@ dependencies = [
     "azure-data-tables>=12.7.0",
     "azure-storage-blob>=12.25.1",
     "fastapi[standard]>=0.115.13",
+    "langchain-mcp-adapters>=0.1.7",
     "langchain[openai]>=0.3.25",
     "langgraph>=0.4.8",
     "langsmith>=0.3.45",

@@ -2,7 +2,7 @@
 Service pour la gestion des recettes avec Azure Table Storage.
 """
 from datetime import datetime, UTC
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import uuid
 import json
 
@@ -71,30 +71,84 @@ class RecipeService:
         """Convertir une entité Table Storage en recette."""
         from app.schemas.recipe import DifficultyLevel, MealType, Ingredient, Step
         
-        # Désérialiser les listes JSON
-        ingredients_data = json.loads(entity["ingredients"])
-        steps_data = json.loads(entity["steps"])
-        tags_data = json.loads(entity["tags"])
+        # Fonction utilitaire pour parser le JSON de manière sécurisée
+        def safe_json_loads(json_str, default_value):
+            if not json_str:
+                return default_value
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                print(f"Erreur de décodage JSON: {json_str}")
+                return default_value
         
-        ingredients = [Ingredient(**ing) for ing in ingredients_data]
-        steps = steps_data
+        # Désérialiser les listes JSON avec gestion des erreurs
+        ingredients_data = safe_json_loads(entity.get("ingredients", "[]"), [])
+        steps_data_raw = safe_json_loads(entity.get("steps", "[]"), [])
+        tags_data = safe_json_loads(entity.get("tags", "[]"), [])
+        
+        # Convertir les étapes de dictionnaires en chaînes de caractères
+        steps_data = []
+        for step in steps_data_raw:
+            try:
+                if isinstance(step, dict):
+                    # Si c'est un dictionnaire avec order et description, le convertir en chaîne
+                    desc = step.get('description', '')
+                    steps_data.append(desc)
+                elif isinstance(step, str):
+                    # Si c'est déjà une chaîne, l'utiliser directement
+                    steps_data.append(step)
+            except Exception as e:
+                print(f"Erreur lors de la conversion d'une étape: {e}")
+        
+        # S'assurer qu'il y a au moins une étape (requis par le modèle)
+        if not steps_data:
+            steps_data = ["Aucune étape disponible"]
+        
+        # Créer les objets Ingredient
+        ingredients = []
+        for ing_data in ingredients_data:
+            try:
+                ingredients.append(Ingredient(**ing_data))
+            except Exception as e:
+                print(f"Erreur lors de la création d'un ingrédient: {e}")
         
         # Récupérer les URLs d'images
         main_image_url = entity.get("main_image_url")
-        additional_images = json.loads(entity.get("additional_images", "[]"))
+        additional_images = safe_json_loads(entity.get("additional_images", "[]"), [])
+        
+        # Gérer la difficulté avec valeur par défaut
+        difficulty_str = entity.get("difficulty", "Facile")
+        try:
+            difficulty = DifficultyLevel(difficulty_str.capitalize())
+        except ValueError:
+            print(f"Niveau de difficulté invalide: {difficulty_str}, utilisation de 'Facile'")
+            difficulty = DifficultyLevel.FACILE
+        
+        # Gérer les types de repas
+        meal_type_data = safe_json_loads(entity.get("meal_type", "[]"), [])
+        meal_types = []
+        for mt in meal_type_data:
+            try:
+                meal_types.append(MealType(mt.capitalize()))
+            except ValueError:
+                print(f"Type de repas invalide: {mt}")
+        
+        # S'assurer qu'il y a au moins un type de repas (requis par le modèle)
+        if not meal_types:
+            meal_types = [MealType.MAIN_COURSE]  # Valeur par défaut
         
         return Recipe(
             id=entity["RowKey"],
             title=entity["title"],
-            description=entity["description"] if entity["description"] else None,
-            difficulty=DifficultyLevel(entity["difficulty"]),
-            meal_type=[MealType(mt) for mt in json.loads(entity["meal_type"])],
+            description=entity.get("description"),
+            difficulty=difficulty,
+            meal_type=meal_types,
             servings=entity["servings"],
             prep_time_minutes=entity["prep_time_minutes"],
-            cook_time_minutes=entity["cook_time_minutes"] if entity["cook_time_minutes"] > 0 else None,
+            cook_time_minutes=entity["cook_time_minutes"] if entity.get("cook_time_minutes", 0) > 0 else None,
             total_time_minutes=entity["total_time_minutes"],
             ingredients=ingredients,
-            steps=steps,
+            steps=steps_data,
             tags=tags_data,
             created_at=entity["created_at"],
             updated_at=entity["updated_at"],
@@ -149,6 +203,36 @@ class RecipeService:
             return None
         except Exception as e:
             raise RuntimeError(f"Erreur lors de la récupération de la recette: {e}")
+    
+    async def get_all_recipes(self, skip: int = 0, limit: int = 10) -> Tuple[List[Recipe], int]:
+        """Récupérer toutes les recettes avec pagination."""
+        if not self.table_client:
+            raise RuntimeError("Azure n'est pas configuré")
+        
+        try:
+            # Récupérer toutes les recettes
+            entities = list(self.table_client.query_entities(query_filter="PartitionKey eq 'recipe'"))
+            
+            # Calculer le total
+            total = len(entities)
+            
+            # Appliquer la pagination
+            paginated_entities = entities[skip:skip + limit]
+            
+            # Convertir les entités en recettes
+            recipes = []
+            for entity in paginated_entities:
+                try:
+                    recipe = self._entity_to_recipe(entity)
+                    recipes.append(recipe)
+                except Exception as e:
+                    # Log l'erreur mais continuer avec les autres recettes
+                    print(f"Erreur lors de la conversion d'une recette: {e}")
+            
+            return recipes, total
+        
+        except Exception as e:
+            raise RuntimeError(f"Erreur lors de la récupération des recettes: {e}")
     
     async def update_recipe(self, recipe_id: str, recipe_update: RecipeUpdate) -> Optional[Recipe]:
         """Mettre à jour une recette existante."""
@@ -333,3 +417,4 @@ def get_recipe_service() -> RecipeService:
 
 # Pour la compatibilité avec le code existant
 recipe_service = RecipeService()
+

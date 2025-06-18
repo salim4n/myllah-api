@@ -2,10 +2,8 @@
 Configuration de l'application.
 """
 from typing import List
-
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
-
 
 class Settings(BaseSettings):
     """Configuration de l'application."""
@@ -25,7 +23,8 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: List[str] = ["*"]
     
     # Base de données et services externes
-    # Ajouter ici les variables d'environnement nécessaires
+    # Configuration OpenAI
+    OPENAI_API_KEY: str = ""
 
 
 settings = Settings()

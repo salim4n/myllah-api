@@ -10,9 +10,6 @@ from app.schemas.recipe import (
     RecipeCreate,
     RecipeUpdate,
     RecipeList,
-    RecipeSearchFilters,
-    DifficultyLevel,
-    MealType,
     ImageURLResponse
 )
 from app.services.recipe_service import get_recipe_service, RecipeService
