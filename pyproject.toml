@@ -1,0 +1,25 @@
+[project]
+name = "myllah"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "azure-data-tables>=12.7.0",
+    "azure-storage-blob>=12.25.1",
+    "fastapi[standard]>=0.115.13",
+    "langchain[openai]>=0.3.25",
+    "langgraph>=0.4.8",
+    "langsmith>=0.3.45",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.0.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
